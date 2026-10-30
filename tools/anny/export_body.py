@@ -261,6 +261,111 @@ shorts = np.minimum(shorts_top - z, z - shorts_bottom)
 shorts[is_arm] = -0.2
 colors = np.clip(np.round(shorts * 1000), -32000, 32000).astype(np.int16)
 
+# ---------- Kas bölgeleri ----------
+# Sıra uygulamadaki MUSCLES anahtarlarıyla aynı; sonuncusu "diğer" (baş, el, ayak vb.)
+MUSCLE_KEYS = ["chest", "shoulders", "biceps", "triceps", "forearms", "abs", "obliques", "upperBack",
+               "lats", "lowerBack", "glutes", "quads", "hamstrings", "calves", "other"]
+MI = {k: i for i, k in enumerate(MUSCLE_KEYS)}
+fwd = np.array([0.0, -1.0, 0.0])  # Anny'de ön = -y
+
+parts = {}  # parça adı → [(a, b), ...]
+for side in ("L", "R"):
+    parts.setdefault("upperarm", []).append((head_of(f"upperarm01.{side}"), head_of(f"lowerarm01.{side}")))
+    parts.setdefault("forearm", []).append((head_of(f"lowerarm01.{side}"), head_of(f"wrist.{side}")))
+    parts.setdefault("hand", []).append((head_of(f"wrist.{side}"), head_of(f"finger3-3.{side}")))
+    parts.setdefault("thigh", []).append((head_of(f"upperleg01.{side}"), head_of(f"lowerleg01.{side}")))
+    parts.setdefault("shin", []).append((head_of(f"lowerleg01.{side}"), head_of(f"foot.{side}")))
+    parts.setdefault("foot", []).append((head_of(f"foot.{side}"), head_of(f"toe1-1.{side}")))
+    parts.setdefault("torso", []).append((head_of(f"pelvis.{side}"), head_of(f"upperleg01.{side}")))
+parts["torso"] += list(zip(spine[:-1], spine[1:]))
+parts["head"] = [(head_of("neck01"), head_of("head"))]
+names = list(parts)
+dists = np.stack([np.min([seg_dist(base, a, b) for a, b in parts[n]], axis=0) for n in names])
+part = np.array(names)[dists.argmin(0)]
+
+
+def seg_param(p, a, b):
+    ab = b - a
+    t = np.clip(((p - a) @ ab) / (ab @ ab), 0, 1)
+    return t, a + t[:, None] * ab
+
+
+muscle = np.full(N, MI["other"], dtype=np.uint8)
+x, y, zz = base[:, 0], base[:, 1], base[:, 2]
+shoulder_z = float(max(head_of("upperarm01.L")[2], head_of("upperarm01.R")[2]))
+
+# Kollar ve bacaklar: segment boyunca konum + önde/arkada olma
+for n in ("upperarm", "forearm", "thigh", "shin"):
+    for a, b in parts[n]:
+        sel = (part == n) & (np.sign(x) == np.sign(a[0] + b[0]))
+        t, c = seg_param(base[sel], a, b)
+        front = (base[sel] - c) @ fwd > 0
+        if n == "upperarm":
+            m = np.where(t < 0.22, MI["shoulders"], np.where(front, MI["biceps"], MI["triceps"]))
+        elif n == "forearm":
+            m = np.full(sel.sum(), MI["forearms"])
+        elif n == "thigh":
+            m = np.where(front, MI["quads"], np.where(base[sel][:, 2] > crotch_z - 0.06, MI["glutes"], MI["hamstrings"]))
+        else:
+            m = np.where(front, MI["other"], MI["calves"])
+        muscle[np.where(sel)[0]] = m
+
+# Gövde: yüksekliğe, öne/arkaya ve merkezden uzaklığa göre
+ts = part == "torso"
+idx = np.where(ts)[0]
+# Her yükseklik dilimi için gövde genişliği ve ön/arka orta çizgisi
+half_w = np.empty(len(idx))
+mid_y = np.empty(len(idx))
+bins = np.linspace(zz[idx].min(), zz[idx].max(), 40)
+bi = np.clip(np.digitize(zz[idx], bins), 1, len(bins) - 1)
+for k in range(1, len(bins)):
+    s = bi == k
+    if s.any():
+        half_w[s] = np.abs(x[idx][s]).max()
+        central = s & (np.abs(x[idx]) < 0.5 * half_w[s].max())
+        ys = y[idx][central] if central.any() else y[idx][s]
+        mid_y[s] = (ys.min() + ys.max()) / 2
+front = y[idx] < mid_y
+rel = np.abs(x[idx]) / np.maximum(half_w, 1e-3)
+zi = zz[idx]
+m = np.full(len(idx), MI["other"])
+# Ön: göğüs meme ucunun 10 cm altından köprücük kemiğine kadar
+m = np.where(front & (zi > chest_z - 0.1) & (rel > 0.8), MI["shoulders"], m)
+m = np.where(front & (zi > chest_z - 0.1) & (zi < shoulder_z + 0.03) & (rel <= 0.8), MI["chest"], m)
+m = np.where(front & (zi <= chest_z - 0.08) & (zi > crotch_z + 0.06) & (rel < 0.42), MI["abs"], m)
+m = np.where(front & (zi <= chest_z - 0.08) & (zi > hip_z) & (rel >= 0.42), MI["obliques"], m)
+# Arka
+m = np.where(~front & (zi > chest_z - 0.04) & (rel > 0.75), MI["shoulders"], m)
+m = np.where(~front & (zi > chest_z - 0.04) & (rel <= 0.75), MI["upperBack"], m)
+m = np.where(~front & (zi <= chest_z - 0.04) & (zi > waist_z) & (rel >= 0.3), MI["lats"], m)
+m = np.where(~front & (zi <= chest_z - 0.04) & (zi > waist_z + 0.08) & (rel < 0.3), MI["upperBack"], m)
+m = np.where(~front & (zi <= waist_z + 0.08) & (zi > hip_z + 0.03) & (rel < 0.3), MI["lowerBack"], m)
+m = np.where(~front & (zi <= waist_z) & (zi > hip_z + 0.03) & (rel >= 0.3), MI["lowerBack"], m)
+m = np.where(~front & (zi <= hip_z + 0.03), MI["glutes"], m)
+# Omuz başı: gövdenin en dışında, omuz ekleminin hizasında
+m = np.where((zi > shoulder_z - 0.06) & (rel > 0.85), MI["shoulders"], m)
+muscle[idx] = m
+# Ensenin altı trapez (üst sırt)
+neck = (part == "head") & (y > head_of("neck01")[1]) & (zz < head_of("neck01")[2] + 0.03)
+muscle[neck] = MI["upperBack"]
+# Göğüs kasının dış kısmı kol segmentine yakın olduğu için "omuz" sayılabiliyor:
+# omuz ekleminin içinde kalan ön üst bölge göğüstür; sırtta kalan göğüs işaretleri üst sırttır
+shoulder_x = float(abs(head_of("upperarm01.L")[0]))
+# Ön/arka için gövde kesitlerinin orta çizgisini tüm köşelere yükseklikle aktar
+order = np.argsort(zi)
+mid_all = np.interp(zz, zi[order], mid_y[order])
+is_front = y < mid_all
+pec = (muscle == MI["shoulders"]) & is_front & (zz < shoulder_z - 0.01) & (zz > chest_z - 0.1) & (np.abs(x) < 0.8 * shoulder_x)
+muscle[pec] = MI["chest"]
+# Yüzey normali arkaya bakan "göğüs" noktaları üst sırttır
+vn = np.zeros_like(base)
+fn = np.cross(base[faces[:, 1]] - base[faces[:, 0]], base[faces[:, 2]] - base[faces[:, 0]])
+for k in range(3):
+    np.add.at(vn, faces[:, k], fn)
+faces_back = vn @ fwd < 0
+muscle[(muscle == MI["chest"]) & (~is_front | faces_back)] = MI["upperBack"]
+print("kas köşeleri:", {k: int((muscle == i).sum()) for i, k in enumerate(MUSCLE_KEYS)})
+
 
 # ---------- Koordinat dönüşümü: Anny (z yukarı, -y ön) → three.js (y yukarı, +z ön) ----------
 def to_three(v):
@@ -274,7 +379,7 @@ scale = float(np.abs(deltas).max() / 32767.0)
 q = np.round(deltas / scale).astype(np.int16)
 
 OUT.mkdir(parents=True, exist_ok=True)
-blobs = [pos.astype(np.float32).tobytes(), faces.astype(np.uint16).tobytes(), colors.tobytes(), q.tobytes()]
+blobs = [pos.astype(np.float32).tobytes(), faces.astype(np.uint16).tobytes(), colors.tobytes(), q.tobytes(), muscle.tobytes()]
 offsets, cur = [], 0
 for b in blobs:
     pad = (-cur) % 4
@@ -289,7 +394,8 @@ meta = {
     "source": "Anny (NAVER LABS Europe, Apache 2.0) · MakeHuman verileri CC0",
     "vertexCount": int(N),
     "triangleCount": int(len(faces)),
-    "offsets": {"positions": offsets[0], "indices": offsets[1], "shorts": offsets[2], "deltas": offsets[3]},
+    "offsets": {"positions": offsets[0], "indices": offsets[1], "shorts": offsets[2], "deltas": offsets[3], "muscle": offsets[4]},
+    "muscles": MUSCLE_KEYS,
     "deltaScale": scale,
     "targets": [t for t, _ in targets],
     "loops": {k: [[int(a), int(b), round(float(t), 5)] for a, b, t in lp] for k, lp in loops.items()},

@@ -12,6 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
   <title>My PT</title>
   <script>
     // Tema, ilk boyamadan önce uygulanır (yanıp sönmeyi önler)
@@ -126,6 +127,29 @@
     .rg-track { fill: none; stroke: var(--surface-2); }
     .rg-val { fill: none; stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset 0.3s; }
     .rg-val.ok { stroke: var(--ok); }
+
+    /* Ana ekran */
+    .home-hero { display: grid; grid-template-columns: 44% 1fr; gap: 6px; padding: 8px 16px 8px 4px; align-items: center; overflow: hidden; }
+    .hh-body { position: relative; display: block; aspect-ratio: 9 / 16; max-width: 100%; touch-action: pan-y; }
+    .hh-body canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    .hh-placeholder { position: absolute; inset: 0; display: grid; place-items: center; }
+    .hh-placeholder svg { width: 70%; opacity: 0.9; }
+    .hh-body.ready .hh-placeholder { display: none; }
+    .hh-info { display: grid; gap: 10px; min-width: 0; }
+    .hh-stats { display: grid; gap: 8px; }
+    .hh-stat { display: grid; gap: 0; }
+    .hh-stat span { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .hh-stat b { font: 700 24px/1.1 var(--font-display); letter-spacing: -0.01em; }
+    .hh-stat small { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .hh-stat small.good { color: var(--ok); }
+    .hh-stat small.bad { color: var(--bad); }
+    .next-card .nc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .nc-title { font: 700 20px/1.2 var(--font-display); letter-spacing: -0.01em; margin-top: 2px; }
+    .nc-when { font-size: 14px; color: var(--muted); margin-top: 2px; }
+    .nc-count { text-align: right; flex-shrink: 0; }
+    .nc-count b { display: block; font: 700 24px/1.1 var(--font-display); color: var(--accent); }
+    .nc-count span { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .map3d img { display: block; width: 100%; max-width: 360px; margin: 0 auto; height: auto; }
 
     /* Bugün kartları */
     .banner { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; border-radius: var(--radius); background: var(--accent-soft); }
@@ -566,6 +590,19 @@
       <!-- SEKME 1: BUGÜN -->
       <section id="tab-daily" class="tab">
         <div class="group" id="today-banners" hidden></div>
+
+        <div class="card home-hero">
+          <a class="hh-body" id="hh-body" href="body.html" aria-label="3D vücudunu incele">
+            <span class="hh-placeholder" id="hh-placeholder"><small class="note">3D yükleniyor…</small></span>
+          </a>
+          <div class="hh-info">
+            <div class="eyebrow">Şu anki halin</div>
+            <div class="hh-stats" id="hh-stats"></div>
+            <a class="link" href="body.html">3D'de incele, önce ve şimdi</a>
+          </div>
+        </div>
+
+        <div class="card pad next-card" id="next-card"></div>
 
         <div class="card summary">
           <div class="ring" id="daily-ring"></div>
@@ -1405,14 +1442,13 @@
         banners.push(`
         <div class="banner">${ICON.calendar.replace('class="i"', "")}<div><b>Program ${left} gün sonra başlıyor</b>${fmtDate(state.startDate)}. O güne kadar yürüyüş ve beslenmeye odaklan.</div></div>`);
       }
-      if (!done && !notStarted && state.schedule.days.includes(dow)) banners.push(`
-        <div class="banner">${ICON.bigDumbbell}<div><b>Bugün antrenman günü</b>Antrenman ${session.label} · saat ${state.schedule.time}</div>
-        <button onclick="goWorkout()">${sessionActive() ? "Devam" : "Başla"}</button></div>`);
       if (dow === state.schedule.weighDay && !state.weights.some(x => x.date === todayStr())) banners.push(`
         <div class="banner weigh">${ICON.scale}<div><b>Bugün tartılma günü</b>Kilo, yağ oranı ve mezura ölçülerini gir.</div>
         <button onclick="goWeigh()">Gir</button></div>`);
-      const sinceExport = state.lastExport ? (new Date(todayStr()) - new Date(state.lastExport)) / 864e5 : Infinity;
-      if ((state.program.history.length || state.weights.length > 1) && sinceExport >= 14) banners.push(`
+      // İlk kontrol başlangıçtan 2 hafta sonra, sonrası son dışa aktarmadan 2 hafta sonra
+      const since = state.lastExport || state.startDate;
+      const sinceExport = since ? (new Date(todayStr()) - new Date(since)) / 864e5 : 0;
+      if (state.program.history.length && sinceExport >= 14) banners.push(`
         <div class="banner weigh">${ICON.calendar.replace('class="i"', "")}<div><b>2 haftalık kontrol</b>Verini kopyala, Claude'a gidişatını sor.</div>
         <button onclick="goExport()">Aktar</button></div>`);
       const bEl = document.getElementById("today-banners");
@@ -1508,7 +1544,7 @@
         </div>
         ${active || done ? `<div class="seg-bar">${items.map(it => `<i class="${pr.today.log[it[0]] ? "on" : it[0] === activeKey ? "cur" : ""}"></i>`).join("")}</div>` : ""}
         ${done ? `<div class="done-banner">${ICON.check}<span>Antrenman kaydedildi · süre ${fmtClock(pr.today.finished.duration || 0)}. Sıradaki yarın açılır.</span></div>` : ""}
-        ${bodyMap(load)}
+        <div class="map3d" data-heat='${JSON.stringify(load)}'>${bodyMap(load)}</div>
         <div class="legend"><span><i></i>Ana kas</span><span><i class="half"></i>Yardımcı kas</span></div>
         ${!active && !done ? `<button class="btn-primary" onclick="startSession()">${ICON.play}Antrenmana başla</button>` : ""}`;
 
@@ -2186,7 +2222,7 @@
       const max = ranked.length ? ranked[0][1] : 0;
       document.querySelectorAll("#heat-range button").forEach(b => b.classList.toggle("on", +b.dataset.range === heatRange));
       document.getElementById("heat-card").innerHTML = `
-        ${bodyMap(normalize(load))}
+        <div class="map3d" data-heat='${JSON.stringify(normalize(load))}'>${bodyMap(normalize(load))}</div>
         ${ranked.length ? `
           <div class="rank">
             ${ranked.map(([k, v]) => `<div class="rank-row"><span>${MUSCLES[k]}</span><span class="rank-bar"><i style="width:${(v / max) * 100}%"></i></span><span class="num">${fmt1(v)}</span></div>`).join("")}
@@ -2551,15 +2587,133 @@
     }
 
     // ---------- Genel ----------
+    // ---------- Ana ekran ----------
+    // Her ölçünün en son değeri (3D vücut ve özet için)
+    function latestMeasures() {
+      const out = { heightCm: state.heightCm || 178 };
+      Object.keys(MEASURES).forEach(k => {
+        const s = state.weights.filter(x => x[k] != null);
+        if (s.length) out[k] = s[s.length - 1][k];
+      });
+      return out;
+    }
+
+    // Henüz yapılmamış sıradaki antrenman
+    function upcomingSession() {
+      const pr = state.program;
+      const phase = phaseOfWeek(pr.week);
+      return { phase, session: phase.sessions[pr.sessionCount % phase.sessions.length], week: pr.week };
+    }
+
+    // Sıradaki antrenman zamanı: seçili günlerden, başlama tarihinden önce değil
+    function nextWorkoutDate() {
+      const [h, m] = (state.schedule.time || "11:00").split(":").map(Number);
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      const doneToday = sessionDoneToday();
+      for (let i = 0; i < 21; i++) {
+        const key = dateKey(d);
+        const okStart = !state.startDate || key >= state.startDate;
+        if (okStart && state.schedule.days.includes(d.getDay()) && !(i === 0 && doneToday)) {
+          d.setHours(h, m, 0, 0);
+          return d;
+        }
+        d.setDate(d.getDate() + 1);
+      }
+      return null;
+    }
+
+    const DAY_NAMES = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+    function whenText(d) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const days = Math.round((new Date(d).setHours(0, 0, 0, 0) - today) / 864e5);
+      const day = days === 0 ? "Bugün" : days === 1 ? "Yarın" : DAY_NAMES[d.getDay()];
+      return `${day} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    }
+    function countdownText(d) {
+      const ms = d - Date.now();
+      if (ms <= 0) return ["Şimdi", "zamanı geldi"];
+      const min = Math.floor(ms / 60000), hrs = Math.floor(min / 60), days = Math.floor(hrs / 24);
+      if (days >= 1) return [`${days} gün`, `${hrs % 24} saat sonra`];
+      if (hrs >= 1) return [`${hrs} sa ${min % 60} dk`, "sonra"];
+      return [`${min} dk`, "sonra"];
+    }
+
+    function renderHome() {
+      // Özet: son değer ve ilk ölçüme göre fark
+      const stat = (k, fmtV) => {
+        const s = state.weights.filter(x => x[k] != null);
+        if (!s.length) return "";
+        const last = s[s.length - 1][k], d = Math.round((last - s[0][k]) * 10) / 10;
+        const cls = !d ? "" : d * MEASURES[k].good > 0 ? "good" : "bad";
+        return `<div class="hh-stat"><span>${MEASURES[k].label}</span><b class="num">${fmtV(last)}</b>${d ? `<small class="${cls} num">${d > 0 ? "+" : "−"}${fmt1(Math.abs(d))} başlangıçtan</small>` : `<small>başlangıç</small>`}</div>`;
+      };
+      const stats = [stat("kg", v => fmtM("kg", v)), stat("waist", v => `${fmt1(v)} cm`), stat("fat", v => `%${fmt1(v)}`)].join("");
+      document.getElementById("hh-stats").innerHTML = stats || `<div class="hh-stat"><small>Henüz ölçüm yok. İlerleme ekranından ilk ölçülerini gir.</small></div>`;
+
+      // Sıradaki antrenman
+      const active = sessionActive();
+      const doneToday = sessionDoneToday();
+      const { phase, session, week } = upcomingSession();
+      const when = active ? null : nextWorkoutDate();
+      const [big, small] = active ? ["Devam", "ediyor"] : when ? countdownText(when) : ["—", ""];
+      const keys = session.items.map(it => it[0]);
+      document.getElementById("next-card").innerHTML = `
+        <div class="nc-top">
+          <div>
+            <div class="eyebrow">${doneToday ? "Bugünkü antrenman tamam · sıradaki" : "Sıradaki antrenman"}</div>
+            <div class="nc-title">Antrenman ${session.label} · ${session.focus}</div>
+            <div class="nc-when">${active ? "Şu an devam ediyor" : when ? whenText(when) : "Antrenman günü seçilmedi"} · ~${estimateMin(session, phase, week)} dk</div>
+          </div>
+          <div class="nc-count num" id="nc-count"><b>${big}</b><span>${small}</span></div>
+        </div>
+        <div class="thumbs">${keys.slice(0, 7).map(k => thumb(k)).join("")}${keys.length > 7 ? `<em>+${keys.length - 7}</em>` : ""}</div>
+        <button class="btn-primary${doneToday && !active ? " done" : ""}" onclick="goWorkout()">${active ? "Antrenmana dön" : doneToday ? "Antrenmanı görüntüle" : `${ICON.play}Antrenmana başla`}</button>`;
+
+      renderHero3D();
+    }
+
+    // 3D: ana ekrandaki canlı vücut ve kas haritası resimleri (motor hazırsa)
+    let body3dReady = false;
+    function renderHero3D() {
+      if (!body3dReady || !window.Body3D) return;
+      const el = document.getElementById("hh-body");
+      window.Body3D.hero(el, latestMeasures()).then(() => el.classList.add("ready")).catch(() => {});
+    }
+    function fill3DMaps() {
+      if (!body3dReady || !window.Body3D) return;
+      const m = latestMeasures();
+      document.querySelectorAll(".map3d[data-heat]").forEach(el => {
+        const heat = JSON.parse(el.dataset.heat);
+        window.Body3D.snapshot(m, heat)
+          .then(url => { if (el.isConnected) el.innerHTML = `<img src="${url}" alt="Çalışan kaslar, önden ve arkadan" />`; })
+          .catch(() => {});
+      });
+    }
+    window.addEventListener("body3d-ready", () => { body3dReady = true; renderHero3D(); fill3DMaps(); });
+    // Vücudu parmakla çevirmek sayfa değiştirmesin; sadece dokunuş 3D sayfasını açar
+    (() => {
+      const el = document.getElementById("hh-body");
+      let start = null;
+      el.addEventListener("pointerdown", e => { start = [e.clientX, e.clientY]; });
+      el.addEventListener("click", e => {
+        if (start && Math.hypot(e.clientX - start[0], e.clientY - start[1]) > 8) e.preventDefault();
+      });
+    })();
+    // Geri sayımı dakikada bir tazele
+    setInterval(() => { if (!document.hidden && !document.getElementById("tab-daily").hidden) renderHome(); }, 30000);
+
     function renderAll() {
       updateCountdown();
       document.getElementById("main-streak").textContent = state.mainStreak;
+      renderHome();
       renderDaily();
       renderWorkout();
       renderPlan();
       renderStats();
       renderThemePicker();
       updateBar();
+      fill3DMaps();
     }
 
     const TAB_TITLES = { daily: "Bugün", workout: "Antrenman", plan: "Plan", stats: "İlerleme" };
@@ -2612,6 +2766,22 @@
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
     }
+  </script>
+  <script type="module">
+    // 3D vücut motoru: yüklenince klasik koda haber verir. Yüklenemezse 2D haritalar kalır.
+    import { getBody, snapshot, mountLive } from "./body/body-view.js";
+    let hero = null, heroKey = "", heroEl = null;
+    window.Body3D = {
+      async hero(el, measures) {
+        const key = JSON.stringify(measures);
+        if (hero && heroEl === el && key === heroKey) return;
+        heroKey = key;
+        if (!hero || heroEl !== el) { hero && hero.dispose(); heroEl = el; hero = await mountLive(el, measures); }
+        else hero.update(measures);
+      },
+      snapshot
+    };
+    getBody().then(() => window.dispatchEvent(new Event("body3d-ready"))).catch(() => {});
   </script>
 </body>
 </html>

@@ -17,7 +17,8 @@ export async function loadBody(base = "body/") {
     positions: new Float32Array(bin, o.positions, N * 3),
     indices: new Uint16Array(bin, o.indices, meta.triangleCount * 3),
     shorts: new Int16Array(bin, o.shorts, N), // şort sınırına uzaklık (mm), pozitif = şort
-    deltas: new Int16Array(bin, o.deltas, meta.targets.length * N * 3)
+    deltas: new Int16Array(bin, o.deltas, meta.targets.length * N * 3),
+    muscle: o.muscle != null ? new Uint8Array(bin, o.muscle, N) : null // köşe başına kas grubu (meta.muscles sırası)
   };
 }
 
