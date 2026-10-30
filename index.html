@@ -2004,9 +2004,11 @@
       const sc = state.schedule;
       if (!sc.days.length) { showToast("Önce antrenman günlerini seç."); return; }
       const stamp = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-      const nextDate = (dow, hhmm) => {
+      // dow gününün başlangıçtan (ya da bugünden) sonraki ilk tekrarı; afterDays kadar ileri kaydırılabilir
+      const nextDate = (dow, hhmm, afterDays = 0) => {
         const d = state.startDate && state.startDate > todayStr() ? new Date(state.startDate + "T00:00:00") : new Date();
         d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() + afterDays);
         while (d.getDay() !== dow) d.setDate(d.getDate() + 1);
         const [h, m] = hhmm.split(":");
         return `${dateKey(d).replace(/-/g, "")}T${h}${m}00`;
@@ -2025,7 +2027,8 @@
           "My PT · Antrenman", "Bugünkü antrenmanın seni bekliyor. Uygulamayı aç ve Antrenmana başla.", 40),
         ...event("weigh", nextDate(sc.weighDay, sc.weighTime), "FREQ=WEEKLY",
           "My PT · Tartılma", "Sabah aç karnına tartıl. Kilo, yağ oranı ve mezura ölçülerini uygulamaya gir.", 10),
-        ...event("checkin", nextDate(sc.weighDay, "20:00"), "FREQ=WEEKLY;INTERVAL=2",
+        // İlk kontrol başlangıçtan 2 hafta sonra: değerlendirecek veri birikmiş olsun
+        ...event("checkin", nextDate(sc.weighDay, "20:00", 13), "FREQ=WEEKLY;INTERVAL=2",
           "My PT · 2 haftalık kontrol", "İlerleme > Yedek ve Claude'a sor > Panoya kopyala. Sonra Claude'a yapıştırıp gidişatını sor.", 15),
         "END:VCALENDAR"
       ];

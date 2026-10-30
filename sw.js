@@ -1,6 +1,6 @@
 // Bu dosya scripts/build-sw.py tarafından üretilir. Elle düzenleme, şablonu düzenle.
 // Tüm dosyalar ilk açılışta telefona kaydedilir; sonra uygulama internetsiz çalışır.
-const CACHE = "my-pt-b353677462";
+const CACHE = "my-pt-45dfa8b7c4";
 const FILES = [
   "./",
   "index.html",
@@ -62,6 +62,7 @@ const FILES = [
   "img/ex/Star_Jump-1.jpg",
   "img/ex/Superman-0.jpg",
   "img/ex/Superman-1.jpg",
+  "body/LICENSE-Anny.txt",
   "body/body-model.js",
   "body/body.bin",
   "body/body.json",
