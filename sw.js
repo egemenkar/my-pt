@@ -1,6 +1,7 @@
 // Bu dosya scripts/build-sw.py tarafından üretilir. Elle düzenleme, şablonu düzenle.
 // Tüm dosyalar ilk açılışta telefona kaydedilir; sonra uygulama internetsiz çalışır.
-const CACHE = "my-pt-9a6d9cce01";
+// Yeni sürüm arka planda iner ve bekler; uygulama "Güncelle" deyince devreye girer.
+const CACHE = "my-pt-37815c7e86";
 const FILES = [
   "./",
   "index.html",
@@ -72,13 +73,19 @@ const FILES = [
 ];
 
 self.addEventListener("install", event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
+  // Tarayıcının HTTP önbelleğini atla: yeni sürüm hep sunucudaki taze dosyalarla kurulsun
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES.map(f => new Request(f, { cache: "reload" })))));
+});
+
+// Uygulamadaki "Güncelle" düğmesi
+self.addEventListener("message", event => {
+  if (event.data === "skipWaiting") self.skipWaiting();
 });
 
 self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k.startsWith("my-pt-") && k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

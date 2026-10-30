@@ -544,6 +544,18 @@
     .cal-d .wdot.plan { background: transparent; border: 1.5px solid var(--water); width: 6px; height: 6px; }
     .cal-legend b { width: 100%; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
 
+    /* Güncelleme çubuğu */
+    .update-bar {
+      position: fixed; z-index: 75; left: 50%; transform: translateX(-50%);
+      top: calc(env(safe-area-inset-top, 0px) + 10px);
+      width: min(448px, calc(100% - 32px)); display: flex; align-items: center; gap: 12px;
+      padding: 10px 10px 10px 16px; border-radius: 16px; background: var(--fg); color: var(--bg);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+    }
+    .update-bar span { flex: 1; display: grid; font-size: 13px; opacity: 0.85; }
+    .update-bar b { font-size: 15px; opacity: 1; }
+    .update-bar button { padding: 9px 14px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: 14px; }
+
     /* Toast */
     .toast {
       position: fixed; z-index: 70; left: 50%; transform: translate(-50%, -8px);
@@ -841,6 +853,7 @@
             <li>Safari'de <strong>Paylaş</strong> <svg class="inline-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4M6 11H5v10h14V11h-1"/></svg>, Chrome'da <strong>menü</strong> <svg class="inline-ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg> düğmesine dokun.</li>
             <li><strong>Ana Ekrana Ekle</strong>'yi seç. İlk açılıştan sonra internetsiz çalışır, veriler sadece bu telefonda saklanır.</li>
           </ol>
+          <p class="note">Yeni sürüm çıkınca uygulamanın üstünde "Yeni sürüm hazır" çubuğu belirir; Güncelle'ye dokunman yeterli. <span id="app-version"></span></p>
           <button class="link" style="justify-self:start;padding:4px" onclick="openOnboarding()">Başlangıç ayarlarını yeniden yap</button>
           <button class="danger" onclick="resetAllData()">Tüm verileri sıfırla</button>
         </div>
@@ -850,6 +863,11 @@
   </main>
 
   <div class="toast" id="toast-box" role="status" aria-live="polite"></div>
+
+  <div class="update-bar" id="update-bar" role="status" hidden>
+    <span><b>Yeni sürüm hazır</b>Verilerin olduğu gibi kalır.</span>
+    <button onclick="applyUpdate()">Güncelle</button>
+  </div>
 
   <!-- Antrenman sırasında: süre + dinlenme -->
   <div class="session-bar" id="session-bar" hidden>
@@ -2762,9 +2780,51 @@
     renderAll();
     if (!state.onboarded) openOnboarding();
 
-    // İnternetsiz çalışma
+    // İnternetsiz çalışma ve güncelleme: yeni sürüm arka planda iner, hazır olunca üstte çubuk çıkar
+    let waitingWorker = null;
+    function showUpdateBar(worker) {
+      waitingWorker = worker;
+      document.getElementById("update-bar").hidden = false;
+    }
+    function applyUpdate() {
+      const btn = document.querySelector("#update-bar button");
+      btn.disabled = true;
+      btn.textContent = "Güncelleniyor…";
+      if (waitingWorker) waitingWorker.postMessage("skipWaiting");
+      else location.reload();
+    }
+    async function showVersion() {
+      try {
+        const v = (await caches.keys()).find(k => k.startsWith("my-pt-"));
+        document.getElementById("app-version").textContent = v ? `Sürüm ${v.slice(6)}` : "";
+      } catch (e) {}
+    }
     if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+      window.addEventListener("load", async () => {
+        try {
+          const reg = await navigator.serviceWorker.register("sw.js");
+          if (reg.waiting && navigator.serviceWorker.controller) showUpdateBar(reg.waiting);
+          reg.addEventListener("updatefound", () => {
+            const w = reg.installing;
+            if (!w) return;
+            w.addEventListener("statechange", () => {
+              if (w.state === "installed" && navigator.serviceWorker.controller) showUpdateBar(w);
+              if (w.state === "activated") showVersion();
+            });
+          });
+          // Uygulama öne gelince yeni sürüm var mı bak
+          document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") reg.update().catch(() => {});
+          });
+          let reloading = false;
+          navigator.serviceWorker.addEventListener("controllerchange", () => {
+            if (reloading || !waitingWorker) return;
+            reloading = true;
+            location.reload();
+          });
+          showVersion();
+        } catch (e) {}
+      });
     }
   </script>
   <script type="module">
