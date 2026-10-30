@@ -2786,12 +2786,18 @@
       waitingWorker = worker;
       document.getElementById("update-bar").hidden = false;
     }
-    function applyUpdate() {
+    let updateRequested = false;
+    async function applyUpdate() {
       const btn = document.querySelector("#update-bar button");
       btn.disabled = true;
       btn.textContent = "Güncelleniyor…";
-      if (waitingWorker) waitingWorker.postMessage("skipWaiting");
+      updateRequested = true;
+      // Arka arkaya birden çok sürüm inmiş olabilir: her zaman en güncel bekleyene gönder
+      const reg = await navigator.serviceWorker.getRegistration().catch(() => null);
+      const w = (reg && reg.waiting) || waitingWorker;
+      if (w) w.postMessage("skipWaiting");
       else location.reload();
+      setTimeout(() => location.reload(), 4000); // yedek: devreye girişi kaçırırsak yine de yenile
     }
     async function showVersion() {
       try {
@@ -2818,7 +2824,7 @@
           });
           let reloading = false;
           navigator.serviceWorker.addEventListener("controllerchange", () => {
-            if (reloading || !waitingWorker) return;
+            if (reloading || !updateRequested) return;
             reloading = true;
             location.reload();
           });

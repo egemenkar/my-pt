@@ -1,7 +1,7 @@
 // Bu dosya scripts/build-sw.py tarafından üretilir. Elle düzenleme, şablonu düzenle.
 // Tüm dosyalar ilk açılışta telefona kaydedilir; sonra uygulama internetsiz çalışır.
 // Yeni sürüm arka planda iner ve bekler; uygulama "Güncelle" deyince devreye girer.
-const CACHE = "my-pt-37815c7e86";
+const CACHE = "my-pt-24dc5bda38";
 const FILES = [
   "./",
   "index.html",
