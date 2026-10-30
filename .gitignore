@@ -1,0 +1,8 @@
+# Kişisel veriler içeren orijinal taslak
+gemini-code-*.html
+.claude/
+.DS_Store
+
+# Anny dışa aktarma ortamı
+tools/anny/.venv/
+tools/anny/out/

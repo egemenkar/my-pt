@@ -1,0 +1,15 @@
+{
+  "name": "My PT",
+  "short_name": "My PT",
+  "description": "Ekipmansız ev antrenmanı, beslenme alışkanlıkları ve ilerleme takibi.",
+  "lang": "tr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F6F5F3",
+  "theme_color": "#DC5A12",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#F6F5F3" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)" />
+  <title>My PT · Vücut</title>
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <script>
+    try {
+      const t = localStorage.getItem("fit_theme");
+      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
+  <style>
+    :root {
+      --bg: #F6F5F3; --surface: #FFFFFF; --surface-2: #EFEDEA; --fg: #1C1A18; --muted: #77716B; --line: #E5E1DC;
+      --accent: #DC5A12; --accent-soft: rgba(220, 90, 18, 0.12); --on-accent: #FFFFFF; --ok: #1E9150; --bad: #C93A3A;
+      --stage-top: #FBFAF8; --stage-bottom: #E9E5E0;
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+      --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #121110; --surface: #1C1B19; --surface-2: #272522; --fg: #F2EFEB; --muted: #9B948C; --line: #302D2A;
+        --accent: #FF7A2E; --accent-soft: rgba(255, 122, 46, 0.16); --on-accent: #1A0E06; --ok: #42C97C; --bad: #FF6B6B;
+        --stage-top: #24221F; --stage-bottom: #151412;
+        color-scheme: dark;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #121110; --surface: #1C1B19; --surface-2: #272522; --fg: #F2EFEB; --muted: #9B948C; --line: #302D2A;
+      --accent: #FF7A2E; --accent-soft: rgba(255, 122, 46, 0.16); --on-accent: #1A0E06; --ok: #42C97C; --bad: #FF6B6B;
+      --stage-top: #24221F; --stage-bottom: #151412;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--font); -webkit-font-smoothing: antialiased; }
+    button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+    [hidden] { display: none !important; }
+    .num { font-variant-numeric: tabular-nums; }
+    .wrap {
+      max-width: 480px; margin: 0 auto; display: grid; gap: 16px;
+      padding: calc(env(safe-area-inset-top, 0px) + 14px) max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 32px) max(16px, env(safe-area-inset-left, 0px));
+    }
+    .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+    .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+    h1 { font: 700 30px/1.1 var(--font-display); letter-spacing: -0.02em; margin: 2px 0 0; }
+    .back { font-size: 14px; font-weight: 600; color: var(--accent); }
+
+    .stage {
+      position: relative; aspect-ratio: 3 / 4; max-width: 100%; border-radius: 20px; overflow: hidden;
+      background: linear-gradient(var(--stage-top), var(--stage-bottom)); touch-action: none;
+    }
+    .stage canvas { display: block; width: 100%; height: 100%; }
+    .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; }
+    .tag {
+      position: absolute; transform: translate(-50%, -130%); pointer-events: none; white-space: nowrap;
+      padding: 6px 10px; border-radius: 10px; background: var(--fg); color: var(--bg); font-size: 13px; font-weight: 600;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    }
+    .tag small { opacity: 0.7; font-weight: 500; }
+    .badge { position: absolute; left: 12px; top: 12px; padding: 4px 10px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; }
+    .hint { position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font-size: 12px; color: var(--muted); pointer-events: none; }
+
+    .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 3px; border-radius: 12px; background: var(--surface-2); }
+    .segmented button { padding: 8px 4px; border-radius: 9px; font-size: 14px; font-weight: 600; color: var(--muted); }
+    .segmented button.on { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+    .slider { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; font-size: 13px; font-weight: 600; color: var(--muted); }
+    .slider input { width: 100%; accent-color: var(--accent); }
+
+    .card { background: var(--surface); border-radius: 16px; padding: 16px; display: grid; gap: 12px; }
+    .card h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+    .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 8px; align-items: center; font-size: 14px; }
+    .grid .h { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); text-align: center; }
+    .field { width: 100%; min-width: 0; padding: 8px; border-radius: 10px; border: 0; background: var(--surface-2); color: var(--fg); font: inherit; font-size: 16px; text-align: center; }
+    .btn { padding: 13px; border-radius: 12px; background: var(--accent); color: var(--on-accent); font-weight: 700; }
+    .note { margin: 0; font-size: 13px; color: var(--muted); }
+    .acc { display: grid; grid-template-columns: 1fr auto auto; gap: 6px 14px; font-size: 14px; }
+    .acc .h { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+    .acc .r { text-align: right; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <div class="eyebrow">My PT · deneme</div>
+        <h1>Vücudun</h1>
+      </div>
+      <a class="back" href="index.html">Uygulamaya dön</a>
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="loading" id="loading">Model yükleniyor…</div>
+      <script>
+        // Model yüklenemezse "yükleniyor"da takılı kalmak yerine nedenini göster
+        (function () {
+          const fail = () => {
+            const l = document.getElementById("loading");
+            if (!l) return;
+            l.innerHTML = location.protocol === "http:" || location.protocol === "https:"
+              ? "<span>Model yüklenemedi. Sayfayı yenile; sorun sürerse internet bağlantısını kontrol et.</span>"
+              : "<span>Bu sayfa dosya olarak açılmış. 3D model için sunucu üzerinden aç:<br><b>http://127.0.0.1:8765/body.html</b></span>";
+            l.style.padding = "24px";
+            l.style.textAlign = "center";
+          };
+          if (!/^https?:$/.test(location.protocol)) fail();
+          window.addEventListener("error", fail, true);
+          setTimeout(fail, 12000);
+        })();
+      </script>
+      <span class="badge" id="badge">Şimdi</span>
+      <div class="tag" id="tag" hidden></div>
+      <div class="hint">Sürükle: çevir · İki parmak: yakınlaştır · Dokun: ölçü</div>
+    </div>
+
+    <div class="segmented" id="angle-picker">
+      <button data-a="0" class="on">Ön</button><button data-a="90">Yan</button><button data-a="180">Arka</button>
+    </div>
+    <div class="segmented" id="view-picker">
+      <button data-v="0">Önce</button>
+      <button data-v="1" class="on">Şimdi</button>
+      <button data-v="side">Yan yana</button>
+    </div>
+    <div class="slider"><span>Önce</span><input type="range" id="blend" min="0" max="100" value="100" aria-label="Önce ve şimdi arası geçiş" /><span>Şimdi</span></div>
+    <div class="segmented" id="ring-picker">
+      <button data-k="chest">Göğüs</button><button data-k="waist">Göbek</button><button data-k="hip">Kalça</button><button data-k="arm">Kol</button><button data-k="thigh">Uyluk</button>
+    </div>
+
+    <p class="note" id="ring-howto">Bir ölçüye dokun: halka, mezurayı tam nereden geçireceğini gösterir.</p>
+
+    <div class="card">
+      <h2>Ölçüler</h2>
+      <form id="form" class="grid">
+        <span></span><span class="h">Önce</span><span class="h">Şimdi</span>
+      </form>
+      <button class="btn" form="form" type="submit">Modeli güncelle</button>
+      <p class="note" id="source-note"></p>
+    </div>
+
+    <div class="card">
+      <h2>Model ne kadar tutuyor?</h2>
+      <div class="acc" id="accuracy"></div>
+      <p class="note">Model; boy, kilo, yağ oranı ve çevre ölçülerine en yakın gerçekçi vücut şeklini seçer. Kas çizgilerini değil, genel şekli gösterir. Model: Anny (NAVER LABS Europe, Apache 2.0), MakeHuman verileri (CC0).</p>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "./vendor/three/OrbitControls.js";
+    import { loadBody, buildPositions, fitBody, lerpParams, loopPoints, measureAll, MEASURE_KEYS } from "./body/body-model.js";
+
+    const LABELS = { chest: "Göğüs", waist: "Göbek", hip: "Kalça", arm: "Kol", thigh: "Uyluk" };
+    // Halkaların durduğu yerle birebir aynı ölçüm talimatı
+    const HOWTO = {
+      chest: "Meme ucu hizasından, mezura sırtta kürek kemiklerinin üstünden yere paralel geçsin. Nefesi normal ver, şişirme.",
+      waist: "Tam göbek deliği hizasından, yere paralel. Nefesi normal ver, karnını içeri çekme.",
+      hip: "Kalçanın (popo) en çıkık yerinden, ayaklar bitişik, yere paralel.",
+      arm: "Kol gevşek ve yanında; omuz ile dirseğin tam ortasından, pazunun tepesinden. Hep aynı kol (baskın taraf).",
+      thigh: "Ayakta, ağırlık iki bacakta eşit; apış arasının hemen altında uyluğun en kalın yerinden. Hep aynı bacak."
+    };
+    const FIELDS = [["heightCm", "Boy (cm)"], ["kg", "Kilo (kg)"], ["fat", "Yağ (%)"], ["chest", "Göğüs (cm)"], ["waist", "Göbek (cm)"], ["hip", "Kalça (cm)"], ["arm", "Kol (cm)"], ["thigh", "Uyluk (cm)"]];
+    const SAMPLE = {
+      before: { heightCm: 178, kg: 92, fat: 27, chest: 106, waist: 100, hip: 104, arm: 31, thigh: 61 },
+      after: { heightCm: 178, kg: 84, fat: 19, chest: 103, waist: 89, hip: 99, arm: 33, thigh: 58 }
+    };
+
+    // Uygulamadaki ilk ve son ölçümleri al; yoksa örnek değerler
+    function readApp() {
+      let st = null, h = null;
+      try { st = JSON.parse(localStorage.getItem("my_pt_v2")); h = (st && st.heightCm) || +localStorage.getItem("my_pt_height") || null; } catch (e) {}
+      const w = (st && st.weights) || [];
+      if (!w.length) return { ...SAMPLE, fromApp: false };
+      const pick = (list, pos) => {
+        const out = { heightCm: h || 178 };
+        for (const [k, src] of [["kg", "kg"], ["fat", "fat"], ["chest", "chest"], ["waist", "waist"], ["hip", "hip"], ["arm", "arm"], ["thigh", "thigh"]]) {
+          const s = list.filter(x => x[src] != null);
+          if (s.length) out[k] = s[pos === "first" ? 0 : s.length - 1][src];
+        }
+        return out;
+      };
+      return { before: pick(w, "first"), after: pick(w, "last"), fromApp: true };
+    }
+
+    let data = readApp();
+    const form = document.getElementById("form");
+    form.insertAdjacentHTML("beforeend", FIELDS.map(([k, label]) => `
+      <span>${label}</span>
+      <input class="field num" type="text" inputmode="decimal" id="b-${k}" value="${data.before[k] ?? ""}" aria-label="Önce ${label}" />
+      <input class="field num" type="text" inputmode="decimal" id="a-${k}" value="${data.after[k] ?? ""}" aria-label="Şimdi ${label}" />`).join(""));
+    document.getElementById("source-note").textContent = data.fromApp
+      ? "Önce: uygulamadaki ilk ölçümün. Şimdi: son ölçümün. Boy, başlangıç ayarlarından gelir."
+      : "Uygulamada henüz ölçüm yok; örnek değerler gösteriliyor. Kendi ölçülerini yazıp modeli güncelle.";
+
+    const readForm = prefix => {
+      const out = {};
+      FIELDS.forEach(([k]) => {
+        const v = parseFloat(document.getElementById(`${prefix}-${k}`).value.replace(",", "."));
+        if (!isNaN(v)) out[k] = v;
+      });
+      return out;
+    };
+
+    // ---------- Sahne ----------
+    const stage = document.getElementById("stage");
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    stage.prepend(renderer.domElement);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(32, 3 / 4, 0.05, 50);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8178, 1.5));
+    const key = new THREE.DirectionalLight(0xffffff, 1.9); key.position.set(2, 4, 3); scene.add(key);
+    const rim = new THREE.DirectionalLight(0xffffff, 0.9); rim.position.set(-2.5, 3, -3); scene.add(rim);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enablePan = false;
+    controls.enableDamping = true;
+    controls.minDistance = 1.0;
+    controls.maxDistance = 6;
+    controls.minPolarAngle = 0.25;
+    controls.maxPolarAngle = Math.PI - 0.3;
+
+    const body = await loadBody("body/");
+    document.getElementById("loading").remove();
+
+    const SKIN = new THREE.Color("#d9cdc0"), SHORTS = new THREE.Color("#2b313a");
+    function makeMesh() {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(body.N * 3), 3).setUsage(THREE.DynamicDrawUsage));
+      g.setIndex(new THREE.BufferAttribute(body.indices, 1));
+      g.setAttribute("shorts", new THREE.BufferAttribute(Float32Array.from(body.shorts), 1));
+      // Şort: köşe başına sınıra uzaklık üçgen içinde karışır, step() ile keskin ve düz kenar
+      const mat = new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.72, metalness: 0 });
+      mat.onBeforeCompile = sh => {
+        sh.uniforms.shortsColor = { value: SHORTS };
+        sh.vertexShader = sh.vertexShader
+          .replace("#include <common>", "#include <common>\nattribute float shorts;\nvarying float vShorts;")
+          .replace("#include <begin_vertex>", "#include <begin_vertex>\nvShorts = shorts;");
+        sh.fragmentShader = sh.fragmentShader
+          .replace("#include <common>", "#include <common>\nuniform vec3 shortsColor;\nvarying float vShorts;")
+          .replace("#include <color_fragment>", "#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb, shortsColor, step(0.0, vShorts));");
+      };
+      const mesh = new THREE.Mesh(g, mat);
+      scene.add(mesh);
+      return mesh;
+    }
+    const meshA = makeMesh(); // tek görünüm ya da yan yanada "şimdi"
+    const meshB = makeMesh(); // yan yanada "önce"
+    const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 48), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.12 }));
+    shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.002; scene.add(shadow);
+
+    let pBefore, pAfter, mode = "1", blend = 1, ringKey = null, ring = null;
+
+    function update(mesh, params) {
+      const attr = mesh.geometry.attributes.position;
+      buildPositions(body, params, attr.array);
+      attr.needsUpdate = true;
+      mesh.geometry.computeVertexNormals();
+      mesh.geometry.computeBoundingSphere();
+      mesh.userData.params = params;
+    }
+
+    function refit() {
+      pBefore = fitBody(body, readForm("b"));
+      pAfter = fitBody(body, readForm("a"));
+      try { const h = readForm("a").heightCm; if (h) localStorage.setItem("my_pt_height", h); } catch (e) {}
+      render();
+    }
+
+    function render() {
+      const side = mode === "side";
+      meshB.visible = side;
+      if (side) {
+        update(meshB, pBefore); meshB.position.x = -0.46;
+        update(meshA, pAfter); meshA.position.x = 0.46;
+      } else {
+        update(meshA, lerpParams(pBefore, pAfter, blend)); meshA.position.x = 0;
+      }
+      shadow.scale.set(side ? 2.2 : 1, 1, 1);
+      document.getElementById("badge").textContent = side ? "Önce · Şimdi" : blend >= 1 ? "Şimdi" : blend <= 0 ? "Önce" : `%${Math.round(blend * 100)}`;
+      const h = meshA.geometry.boundingSphere.center.y * 2;
+      controls.target.set(0, h * 0.52, 0);
+      if (!camera.userData.placed) { camera.position.set(0, h * 0.6, side ? 5.2 : 3.9); camera.userData.placed = true; }
+      drawRing();
+      renderAccuracy();
+    }
+
+    // ---------- Ölçü halkası ----------
+    function drawRing() {
+      if (ring) { ring.parent.remove(ring); ring.geometry.dispose(); ring = null; }
+      const tag = document.getElementById("tag");
+      document.querySelectorAll("#ring-picker button").forEach(b => b.classList.toggle("on", b.dataset.k === ringKey));
+      document.getElementById("ring-howto").innerHTML = ringKey
+        ? `<strong>${LABELS[ringKey]}:</strong> ${HOWTO[ringKey]}`
+        : "Bir ölçüye dokun: halka, mezurayı tam nereden geçireceğini gösterir.";
+      if (!ringKey) { tag.hidden = true; return; }
+      const pos = meshA.geometry.attributes.position.array;
+      const pts = loopPoints(body, pos, ringKey);
+      const c = pts.reduce((s, p) => [s[0] + p[0], s[1] + p[1], s[2] + p[2]], [0, 0, 0]).map(v => v / pts.length);
+      const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(
+        c[0] + (p[0] - c[0]) * 1.015, c[1] + (p[1] - c[1]) * 1.015, c[2] + (p[2] - c[2]) * 1.015)), true);
+      const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+      ring = new THREE.Mesh(new THREE.TubeGeometry(curve, 160, 0.0045, 6, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(accent) }));
+      meshA.add(ring);
+      const model = measureAll(body, pos)[ringKey];
+      const entered = (mode === "side" || blend >= 0.5 ? readForm("a") : readForm("b"))[ringKey];
+      tag.innerHTML = `${LABELS[ringKey]} ${Math.round(model)} cm${entered ? ` <small>· girdiğin ${entered}</small>` : ""}`;
+      tag.hidden = false;
+      ring.userData.anchor = new THREE.Vector3(c[0], c[1], c[2] + 0.12);
+    }
+
+    function placeTag() {
+      if (!ring) return;
+      const p = meshA.localToWorld(ring.userData.anchor.clone()).project(camera);
+      const r = stage.getBoundingClientRect();
+      const tag = document.getElementById("tag");
+      tag.style.left = `${(p.x * 0.5 + 0.5) * r.width}px`;
+      tag.style.top = `${(-p.y * 0.5 + 0.5) * r.height}px`;
+    }
+
+    // Dokunulan yerin en yakın ölçü halkası
+    const ray = new THREE.Raycaster();
+    let down = null;
+    renderer.domElement.addEventListener("pointerdown", e => { down = [e.clientX, e.clientY]; });
+    renderer.domElement.addEventListener("pointerup", e => {
+      if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
+      const r = renderer.domElement.getBoundingClientRect();
+      ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+      const hit = ray.intersectObject(meshA)[0];
+      if (!hit) { ringKey = null; drawRing(); return; }
+      const local = meshA.worldToLocal(hit.point.clone());
+      const pos = meshA.geometry.attributes.position.array;
+      let best = null;
+      MEASURE_KEYS.forEach(k => {
+        const d = Math.min(...loopPoints(body, pos, k).map(p => Math.hypot(p[0] - local.x, p[1] - local.y, p[2] - local.z)));
+        if (!best || d < best[1]) best = [k, d];
+      });
+      ringKey = best && best[1] < 0.12 ? best[0] : null;
+      drawRing();
+    });
+
+    function renderAccuracy() {
+      const rows = [["b", pBefore, "Önce"], ["a", pAfter, "Şimdi"]].map(([prefix, p]) => {
+        const pos = buildPositions(body, p);
+        return [readForm(prefix), measureAll(body, pos)];
+      });
+      const fmt = (e, m) => e == null ? "—" : `${e} → ${Math.round(m)}`;
+      document.getElementById("accuracy").innerHTML = `<span class="h">Ölçü (girdiğin → model)</span><span class="h r">Önce</span><span class="h r">Şimdi</span>` +
+        MEASURE_KEYS.map(k => `<span>${LABELS[k]}</span><span class="r num">${fmt(rows[0][0][k], rows[0][1][k])}</span><span class="r num">${fmt(rows[1][0][k], rows[1][1][k])}</span>`).join("");
+    }
+
+    // ---------- Kontroller ----------
+    document.getElementById("view-picker").addEventListener("click", e => {
+      const v = e.target.dataset.v;
+      if (!v) return;
+      mode = v;
+      if (v !== "side") { blend = +v; document.getElementById("blend").value = blend * 100; }
+      camera.userData.placed = false;
+      document.querySelectorAll("#view-picker button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+      render();
+    });
+    // Ön / Yan / Arka: modeller kendi ekseninde döner, yan yanada da profiller yan yana görünür
+    document.getElementById("angle-picker").addEventListener("click", e => {
+      const a = e.target.dataset.a;
+      if (a == null) return;
+      const rad = (-(+a) * Math.PI) / 180;
+      meshA.rotation.y = meshB.rotation.y = rad;
+      camera.userData.placed = false;
+      render();
+      controls.update();
+      document.querySelectorAll("#angle-picker button").forEach(b => b.classList.toggle("on", b === e.target));
+    });
+    document.getElementById("blend").addEventListener("input", e => {
+      blend = e.target.value / 100;
+      if (mode === "side") { mode = "1"; camera.userData.placed = false; }
+      document.querySelectorAll("#view-picker button").forEach(b => b.classList.toggle("on", b.dataset.v === (blend === 0 ? "0" : blend === 1 ? "1" : "")));
+      render();
+    });
+    document.getElementById("ring-picker").addEventListener("click", e => {
+      const k = e.target.dataset.k;
+      if (!k) return;
+      ringKey = ringKey === k ? null : k;
+      drawRing();
+    });
+    form.addEventListener("submit", e => { e.preventDefault(); refit(); });
+
+    function resize() {
+      const r = stage.getBoundingClientRect();
+      renderer.setSize(r.width, r.height, false);
+      camera.aspect = r.width / r.height;
+      camera.updateProjectionMatrix();
+    }
+    new ResizeObserver(resize).observe(stage);
+    resize();
+    refit();
+
+    renderer.setAnimationLoop(() => {
+      controls.update();
+      renderer.render(scene, camera);
+      placeTag();
+    });
+  </script>
+</body>
+</html>
